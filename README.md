@@ -14,3 +14,8 @@ Lab 5: Grey Wolf Optimizer (GWO)
 Lab 6: Parallel Cellular Algorithms and Programs
 
 Lab 7: Optimization via Gene Expression Algorithms
+
+
+
+
+Lab Exam: Code for Lab Assessment
