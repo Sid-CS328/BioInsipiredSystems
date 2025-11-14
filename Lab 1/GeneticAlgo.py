@@ -1,83 +1,89 @@
-#Problem 1: Genetic Algorithm for Optimization Problems
+# Lab 1
+
+# Genetic Algorithm for Optimization Problems
+# Application: Portfolio Optimization (with Diversification) Using Genetic Algorithm
+# Goal: Maximize (Return - Risk_penalty * Risk)
+
 
 import random
+import numpy as np
 
 
-def fitness_function(x):
-    return x ** 3
+expected_returns = np.array([0.12, 0.10, 0.15, 0.09])
 
+cov_matrix = np.array([
+    [0.006, -0.002, 0.004, 0.000],
+    [-0.002, 0.005, -0.001, 0.002],
+    [0.004, -0.001, 0.010, 0.003],
+    [0.000, 0.002, 0.003, 0.007]
+])
 
-POPULATION_SIZE = 50
-GENES_LENGTH = 10
-MUTATION_RATE = 0.01
-CROSSOVER_RATE = 0.7
-GENERATIONS = 50
+risk_penalty = 0.5
+diversification_weight = 0.05
 
+POP_SIZE = 30
+GENERATIONS = 60
+MUTATION_RATE = 0.1
+CROSSOVER_RATE = 0.8
+NUM_ASSETS = 4
 
-def random_individual():
-    return ''.join(random.choice('01') for _ in range(GENES_LENGTH))
+def create_individual():
+    weights = np.random.rand(NUM_ASSETS)
+    return weights / np.sum(weights)
 
-def decode(individual):
-    decimal = int(individual, 2)
-    return 10 * decimal / (2**GENES_LENGTH - 1)
+def fitness(weights):
+    portfolio_return = np.dot(weights, expected_returns)
+    portfolio_risk = np.dot(weights.T, np.dot(cov_matrix, weights))
 
-def evaluate_population(population):
-    return [(ind, fitness_function(decode(ind))) for ind in population]
+    diversification = -np.sum(weights**2)
 
+    return portfolio_return - risk_penalty * portfolio_risk + \
+           diversification_weight * diversification
 
-def select(population_fitness):
-    total_fitness = sum(f for _, f in population_fitness)
-    pick = random.uniform(0, total_fitness)
-    current = 0
-    for individual, fitness in population_fitness:
-        current += fitness
-        if current > pick:
-            return individual
-    return population_fitness[-1][0] 
+def select_parent(population):
+    a, b = random.sample(population, 2)
+    return a if fitness(a) > fitness(b) else b
 
-
-def crossover(parent1, parent2):
+def crossover(p1, p2):
     if random.random() < CROSSOVER_RATE:
-        point = random.randint(1, GENES_LENGTH - 1)
-        return parent1[:point] + parent2[point:], parent2[:point] + parent1[point:]
-    return parent1, parent2
-
+        point = random.randint(1, NUM_ASSETS - 1)
+        child = np.concatenate((p1[:point], p2[point:]))
+        return child / np.sum(child)
+    return p1
 
 def mutate(individual):
-    return ''.join(
-        bit if random.random() > MUTATION_RATE else ('1' if bit == '0' else '0')
-        for bit in individual
-    )
+    if random.random() < MUTATION_RATE:
+        index = random.randint(0, NUM_ASSETS - 1)
+        individual[index] += np.random.uniform(-0.1, 0.1)
+        individual = np.maximum(individual, 0)
+        return individual / np.sum(individual)
+    return individual
 
+population = [create_individual() for _ in range(POP_SIZE)]
+best_solution = None
 
-def genetic_algorithm():
-    population = [random_individual() for _ in range(POPULATION_SIZE)]
-    best_individual = None
-    best_fitness = float('-inf')
+for gen in range(GENERATIONS):
+    new_population = []
 
-    for generation in range(GENERATIONS):
-        population_fitness = evaluate_population(population)
-        population_fitness.sort(key=lambda x: x[1], reverse=True)
-        
- 
-        if population_fitness[0][1] > best_fitness:
-            best_fitness = population_fitness[0][1]
-            best_individual = population_fitness[0][0]
-        
-        print(f"Generation {generation}: Best fitness = {best_fitness:.5f}")
+    for _ in range(POP_SIZE):
+        p1 = select_parent(population)
+        p2 = select_parent(population)
+        child = crossover(p1, p2)
+        child = mutate(child)
+        new_population.append(child)
 
+    population = new_population
 
-        new_population = []
-        while len(new_population) < POPULATION_SIZE:
-            parent1 = select(population_fitness)
-            parent2 = select(population_fitness)
-            child1, child2 = crossover(parent1, parent2)
-            new_population.extend([mutate(child1), mutate(child2)])
+    best = max(population, key=fitness)
+    if best_solution is None or fitness(best) > fitness(best_solution):
+        best_solution = best
 
-        population = new_population[:POPULATION_SIZE]
+    print(f"Generation {gen+1}: Best Fitness = {fitness(best_solution):.5f}")
 
+print("\nOptimal Diversified Portfolio:")
+for i, w in enumerate(best_solution):
+    print(f"Asset {i+1}: {w*100:.2f}%")
 
-    x = decode(best_individual)
-    print(f"\nBest solution: x = {x:.5f}, f(x) = {fitness_function(x):.5f}")
-
-genetic_algorithm()
+print(f"\nExpected Return: {np.dot(best_solution, expected_returns):.4f}")
+print(f"Portfolio Risk: {np.dot(best_solution.T, np.dot(cov_matrix, best_solution)):.4f}")
+print(f"Final Fitness: {fitness(best_solution):.4f}")
