@@ -1,94 +1,80 @@
 # Lab 7
 
-import random
-import math
+# Optimization via Gene Expression Algorithms
+# Application: Feature Selection in Machine Learning
 
-# Example: f(x) = x * sin(10*pi*x) + 2
-def fitness_function(x):
-    return x * math.sin(10 * math.pi * x) + 2
 
-POPULATION_SIZE = 6
-GENE_LENGTH = 10
-MUTATION_RATE = 0.05
-CROSSOVER_RATE = 0.8
-GENERATIONS = 20
-DOMAIN = (-1, 2)
 
-def random_gene():
-    return random.uniform(DOMAIN[0], DOMAIN[1])
+import numpy as np
+from sklearn.datasets import load_breast_cancer
+from sklearn.model_selection import cross_val_score
+from sklearn.ensemble import RandomForestClassifier
 
-def create_chromosome():
-    return [random_gene() for _ in range(GENE_LENGTH)]
 
-def initialize_population(size):
-    return [create_chromosome() for _ in range(size)]
+data = load_breast_cancer()
+X = data.data
+y = data.target
+num_features = X.shape[1]
 
-def evaluate_population(population):
-    return [fitness_function(express_gene(chrom)) for chrom in population]
+population_size = 20
+generations = 30
+mutation_rate = 0.1
+crossover_rate = 0.8
+num_genes = num_features
 
-def express_gene(chromosome):
-    return sum(chromosome) / len(chromosome)
+population = np.random.randint(2, size=(population_size, num_genes))
 
-def select(population, fitnesses):
-    total_fitness = sum(fitnesses)
-    pick = random.uniform(0, total_fitness)
-    current = 0
-    for individual, fitness in zip(population, fitnesses):
-        current += fitness
-        if current > pick:
-            return individual
-    return random.choice(population)
+def fitness(individual):
+    selected_features = [i for i, gene in enumerate(individual) if gene == 1]
+    if not selected_features:
+        return 0
+    X_subset = X[:, selected_features]
+    clf = RandomForestClassifier(n_estimators=50, random_state=42)
+    score = cross_val_score(clf, X_subset, y, cv=3).mean()
+    return score
+
+def select(population, fitness_vals):
+    probs = fitness_vals / np.sum(fitness_vals)
+    idx = np.random.choice(len(population), size=2, p=probs)
+    return population[idx[0]], population[idx[1]]
 
 def crossover(parent1, parent2):
-    if random.random() < CROSSOVER_RATE:
-        point = random.randint(1, GENE_LENGTH - 1)
-        child1 = parent1[:point] + parent2[point:]
-        child2 = parent2[:point] + parent1[point:]
+    if np.random.rand() < crossover_rate:
+        point = np.random.randint(1, num_genes-1)
+        child1 = np.concatenate([parent1[:point], parent2[point:]])
+        child2 = np.concatenate([parent2[:point], parent1[point:]])
         return child1, child2
-    return parent1[:], parent2[:]
+    return parent1.copy(), parent2.copy()
 
-def mutate(chromosome):
-    new_chromosome = []
-    for gene in chromosome:
-        if random.random() < MUTATION_RATE:
-            new_chromosome.append(random_gene())
-        else:
-            new_chromosome.append(gene)
-    return new_chromosome
+def mutate(individual):
+    for i in range(num_genes):
+        if np.random.rand() < mutation_rate:
+            individual[i] = 1 - individual[i]
+    return individual
 
-def gene_expression_algorithm():
-    population = initialize_population(POPULATION_SIZE)
-    best_solution = None
-    best_fitness = float("-inf")
+best_solution = None
+best_fitness = 0
 
-    for generation in range(GENERATIONS):
-        fitnesses = evaluate_population(population)
+for gen in range(generations):
+    fitness_vals = np.array([fitness(ind) for ind in population])
 
-        for i, chrom in enumerate(population):
-            if fitnesses[i] > best_fitness:
-                best_fitness = fitnesses[i]
-                best_solution = chrom[:]
+    max_idx = np.argmax(fitness_vals)
+    if fitness_vals[max_idx] > best_fitness:
+        best_fitness = fitness_vals[max_idx]
+        best_solution = population[max_idx].copy()
+    
+    new_population = []
+    while len(new_population) < population_size:
+        p1, p2 = select(population, fitness_vals)
+        c1, c2 = crossover(p1, p2)
+        c1 = mutate(c1)
+        c2 = mutate(c2)
+        new_population.extend([c1, c2])
+    
+    population = np.array(new_population[:population_size])
+    print(f"Generation {gen+1}: Best Fitness = {best_fitness:.4f}")
 
-        print(f"Generation {generation+1}: Best Fitness = {best_fitness:.4f}, Best x = {express_gene(best_solution):.4f}")
-
-        new_population = []
-        while len(new_population) < POPULATION_SIZE:
-            parent1 = select(population, fitnesses)
-            parent2 = select(population, fitnesses)
-            offspring1, offspring2 = crossover(parent1, parent2)
-            offspring1 = mutate(offspring1)
-            offspring2 = mutate(offspring2)
-            new_population.extend([offspring1, offspring2])
-
-        population = new_population[:POPULATION_SIZE]
-
-    print("\nBest solution found:")
-    print(f"Genes: {best_solution}")
-    x_value = express_gene(best_solution)
-    print(f"x = {x_value:.4f}")
-    print(f"f(x) = {fitness_function(x_value):.4f}")
-
-if __name__ == "__main__":
-    gene_expression_algorithm()
-    print("Siddharth Arya")
-    print("1BM23CS328")
+selected_features = [i for i, gene in enumerate(best_solution) if gene == 1]
+print("\nOptimal Feature Subset Indices:", selected_features)
+print("Number of Features Selected:", len(selected_features))
+print("Best Cross-Validated Accuracy:", best_fitness)
